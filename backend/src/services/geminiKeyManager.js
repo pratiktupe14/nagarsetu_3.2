@@ -3,8 +3,9 @@
  * Manages deterministic rotation, health tracking, cooldown, and recovery across Gemini API keys.
  */
 
-const COOLDOWN_QUOTA_MS = 5 * 60 * 1000; // 5 minutes for 429 / RESOURCE_EXHAUSTED
-const COOLDOWN_TEMP_MS = 60 * 1000;      // 60 seconds for 5xx / timeout / network failure
+const COOLDOWN_INVALID_MS = 10 * 60 * 1000; // 10 minutes for 401 / 403 / API_KEY_INVALID
+const COOLDOWN_QUOTA_MS = 5 * 60 * 1000;   // 5 minutes for 429 / RESOURCE_EXHAUSTED
+const COOLDOWN_TEMP_MS = 60 * 1000;        // 60 seconds for 5xx / timeout / network failure
 
 // Process-level in-memory state
 let currentIndex = 0;
@@ -17,18 +18,21 @@ function getAvailableKeys() {
   }
 
   const keys = [];
-  for (let i = 1; i <= 5; i++) {
-    const k = process.env[`GEMINI_API_KEY_${i}`];
-    if (k && k.trim() && k !== 'your_gemini_api_key_here' && !k.includes('placeholder')) {
-      keys.push(k.trim());
+  for (let i = 1; i <= 6; i++) {
+    const raw = process.env[`GEMINI_API_KEY_${i}`];
+    if (raw) {
+      const k = raw.trim().replace(/^["']|["']$/g, '');
+      if (k && k !== 'your_gemini_api_key_here' && !k.includes('placeholder') && !keys.includes(k)) {
+        keys.push(k);
+      }
     }
   }
 
-  // Fallback / merge legacy single or comma-separated GEMINI_API_KEY
-  if (process.env.GEMINI_API_KEY) {
-    const raw = process.env.GEMINI_API_KEY.trim();
+  // Fallback to legacy single or comma-separated GEMINI_API_KEY only if no numbered keys found
+  if (keys.length === 0 && process.env.GEMINI_API_KEY) {
+    const raw = process.env.GEMINI_API_KEY.trim().replace(/^["']|["']$/g, '');
     if (raw.includes(',')) {
-      raw.split(',').map(s => s.trim()).filter(Boolean).forEach(k => {
+      raw.split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean).forEach(k => {
         if (k && k !== 'your_gemini_api_key_here' && !k.includes('placeholder') && !keys.includes(k)) {
           keys.push(k);
         }
@@ -126,7 +130,7 @@ async function executeWithFailover(apiCallFn) {
     throw unconfiguredErr;
   }
 
-  const maxAttempts = Math.min(keys.length, 5);
+  const maxAttempts = Math.min(keys.length, 6);
   const now = Date.now();
   let attemptsMade = 0;
   let lastRetryableError = null;
@@ -146,13 +150,19 @@ async function executeWithFailover(apiCallFn) {
     }
 
     if (selectedSlot === -1) {
-      // All keys are currently in cooldown
-      console.warn('[GEMINI FAILOVER] All Gemini keys are currently in cooldown.');
-      const allExhaustedErr = new Error('Gemini service is temporarily unavailable. Please try again later.');
-      allExhaustedErr.error = 'ALL_GEMINI_KEYS_UNAVAILABLE';
-      allExhaustedErr.message = 'Gemini service is temporarily unavailable. Please try again later.';
-      allExhaustedErr.statusCode = 503;
-      throw allExhaustedErr;
+      // Closed loop: Recover the key slot with the earliest expiry
+      let earliestSlot = 0;
+      let earliestTime = Infinity;
+      for (let s = 0; s < keys.length; s++) {
+        const h = keyHealth.get(s);
+        if (h && h.unavailableUntil < earliestTime) {
+          earliestTime = h.unavailableUntil;
+          earliestSlot = s;
+        }
+      }
+      selectedSlot = earliestSlot;
+      currentIndex = earliestSlot;
+      console.warn(`[GEMINI FAILOVER] Keys in cooldown; recovering slot ${selectedSlot + 1} (closed loop)`);
     }
 
     const currentKey = keys[selectedSlot];
@@ -176,7 +186,7 @@ async function executeWithFailover(apiCallFn) {
 
       if (isInvalidKeyError(err)) {
         keyHealth.set(selectedSlot, {
-          unavailableUntil: Date.now() + 24 * 60 * 60 * 1000,
+          unavailableUntil: Date.now() + COOLDOWN_INVALID_MS,
           reason: 'API_KEY_INVALID'
         });
         console.warn(`[GEMINI FAILOVER] Gemini key ${slotHumanNumber} invalid/unauthorized (status ${err.statusCode || err.status}); switching to key ${nextSlotHumanNumber}`);
@@ -202,8 +212,9 @@ async function executeWithFailover(apiCallFn) {
   // If loop completes without success, all available keys failed
   console.error(`[GEMINI FAILOVER] All ${attemptsMade} Gemini keys attempted and failed.`);
   const fatalErr = new Error('Gemini service is temporarily unavailable. Please try again later.');
-  fatalErr.error = 'ALL_GEMINI_KEYS_UNAVAILABLE';
-  fatalErr.message = 'Gemini service is temporarily unavailable. Please try again later.';
+  fatalErr.error = 'AI_TEMPORARILY_UNAVAILABLE';
+  fatalErr.errorCode = 'AI_TEMPORARILY_UNAVAILABLE';
+  fatalErr.message = 'AI Vision analysis is temporarily unavailable.';
   fatalErr.statusCode = 503;
   throw fatalErr;
 }
@@ -230,6 +241,7 @@ module.exports = {
   isRetryableError,
   isInvalidKeyError,
   isQuotaError,
+  getAvailableKeys,
   COOLDOWN_QUOTA_MS,
   COOLDOWN_TEMP_MS,
   _resetState,

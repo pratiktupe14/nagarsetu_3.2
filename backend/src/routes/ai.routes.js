@@ -1,24 +1,24 @@
 const express = require('express');
 const router = express.Router();
-const { uploadSingleImage } = require('../middleware/upload');
-const { analyzeComplaintPhoto } = require('../services/aiService');
+const fs = require('fs');
+const { upload } = require('../middleware/upload');
+const { analyzeComplaintPhoto, getCurrentModel } = require('../services/aiService');
 const { authenticateToken } = require('../middleware/auth');
 
 /**
  * Lightweight Gemini Health Check Endpoint
  * GET /api/ai/health
- * Returns status based strictly on environment configuration without external API calls
  */
 router.get('/health', (req, res) => {
   let configuredKeyCount = 0;
-  for (let i = 1; i <= 5; i++) {
+  for (let i = 1; i <= 6; i++) {
     const k = process.env[`GEMINI_API_KEY_${i}`];
     if (k && k.trim() !== '' && k !== 'your_gemini_api_key_here' && !k.includes('placeholder')) {
       configuredKeyCount++;
     }
   }
 
-  // Fallback to legacy single or comma-separated GEMINI_API_KEY if slot keys not set
+  // Fallback to legacy single or comma-separated GEMINI_API_KEY
   if (configuredKeyCount === 0 && process.env.GEMINI_API_KEY) {
     const raw = process.env.GEMINI_API_KEY.trim();
     if (raw && raw !== 'your_gemini_api_key_here' && !raw.includes('placeholder')) {
@@ -39,21 +39,35 @@ router.get('/health', (req, res) => {
     configured: aiConfigured,
     reachable: aiConfigured,
     configuredKeyCount,
-    model: 'gemini-2.5-flash'
+    model: (typeof getCurrentModel === 'function' && getCurrentModel()) || 'gemini-2.5-flash'
   });
 });
 
 /**
  * Direct Image Vision Analysis Endpoint
  * POST /api/ai/analyze
- * Accepts uploaded photo file and returns Gemini 2.5 Flash structured classification
+ * Accepts multipart photo file and returns Gemini classification with 4-quadrant risk matrix
  */
 router.post('/analyze', (req, res, next) => {
   if (req.headers['authorization']) {
     return authenticateToken(req, res, next);
   }
   next();
-}, uploadSingleImage('photo'), async (req, res) => {
+}, (req, res, next) => {
+  upload.single('photo')(req, res, (err) => {
+    if (err) {
+      if (err.name === 'MulterError') {
+        return res.status(400).json({
+          success: false,
+          error: 'INVALID_IMAGE',
+          message: `Multer upload error: ${err.message}. Expected multipart field "photo".`
+        });
+      }
+      return next(err);
+    }
+    next();
+  });
+}, async (req, res) => {
   const reqTime = new Date().toISOString();
   console.log(`[${reqTime}] [NAGARSETU AI] Request received: POST /api/ai/analyze`);
 
@@ -63,13 +77,12 @@ router.post('/analyze', (req, res, next) => {
       return res.status(400).json({
         success: false,
         error: 'INVALID_IMAGE',
-        message: 'No valid photo file provided in request (expected multipart file field "photo").'
+        message: 'No photo file provided in request. Expected multipart field "photo".'
       });
     }
 
-    console.log(`[${reqTime}] [NAGARSETU AI] Image received: originalname="${req.file.originalname}", size=${req.file.size || req.file.buffer?.length} bytes, mimetype="${req.file.mimetype}"`);
+    console.log(`[${reqTime}] [NAGARSETU AI] Image received: name="${req.file.originalname}", size=${req.file.size || req.file.buffer?.length} bytes, mimetype="${req.file.mimetype}"`);
 
-    const fs = require('fs');
     let buffer = req.file.buffer;
     if (!buffer && req.file.path && fs.existsSync(req.file.path)) {
       buffer = fs.readFileSync(req.file.path);
@@ -79,11 +92,11 @@ router.post('/analyze', (req, res, next) => {
       return res.status(400).json({
         success: false,
         error: 'INVALID_IMAGE',
-        message: 'Uploaded photo file is empty or unreadable.'
+        message: 'Uploaded photo file is empty (0 bytes).'
       });
     }
 
-    // Pass buffer + mimetype directly to aiService
+    // Call Gemini Vision AI Service with actual image bytes
     const aiAnalysis = await analyzeComplaintPhoto({
       buffer,
       mimetype: req.file.mimetype || 'image/jpeg',
@@ -93,11 +106,11 @@ router.post('/analyze', (req, res, next) => {
 
     if (aiAnalysis.success === false) {
       const statusCode = aiAnalysis.statusCode || 500;
-      console.error(`[${reqTime}] [NAGARSETU AI] Vision analysis returned error status ${statusCode}:`, aiAnalysis.error || aiAnalysis.message);
+      console.error(`[${reqTime}] [NAGARSETU AI] Vision analysis returned error:`, aiAnalysis.error || aiAnalysis.message);
       return res.status(statusCode).json({
         success: false,
         error: aiAnalysis.error || 'AI_SERVER_ERROR',
-        message: 'AI Vision analysis is temporarily unavailable. Please try again.',
+        message: aiAnalysis.message || 'AI Vision analysis is temporarily unavailable.',
         retryable: aiAnalysis.retryable ?? true
       });
     }
@@ -107,45 +120,50 @@ router.post('/analyze', (req, res, next) => {
       aiAnalysis.photo_url = photoUrl;
     }
 
-    console.log(`[${reqTime}] [NAGARSETU AI] Success: model="${aiAnalysis.model}", category="${aiAnalysis.category}", department="${aiAnalysis.recommended_department}"`);
+    const riskObject = {
+      human_safety: aiAnalysis.risk?.human_safety ?? aiAnalysis.human_safety ?? 0,
+      public_disruption: aiAnalysis.risk?.public_disruption ?? aiAnalysis.public_disruption ?? 0,
+      health_environment: aiAnalysis.risk?.health_environment ?? aiAnalysis.health_environment ?? 0,
+      physical_severity: aiAnalysis.risk?.physical_severity ?? aiAnalysis.physical_severity ?? 0,
+      risk_score: aiAnalysis.risk?.risk_score ?? aiAnalysis.risk_score ?? 0,
+      severity: aiAnalysis.risk?.severity || (aiAnalysis.severity ? (aiAnalysis.severity.charAt(0).toUpperCase() + aiAnalysis.severity.slice(1).toLowerCase()) : 'Medium')
+    };
 
-    // Attach 4-Quadrant Risk Matrix to AI classification
-    try {
-      const { calculateRiskAssessment, inferRiskScores } = require('../services/riskMatrixService');
-      const inferred = inferRiskScores(aiAnalysis);
-      const riskAssessment = calculateRiskAssessment({
-        ...inferred,
-        category: aiAnalysis.category,
-        priority: aiAnalysis.priority || aiAnalysis.urgency,
-        support_count: 1
-      });
-      aiAnalysis.risk_assessment = riskAssessment;
-      aiAnalysis.safety_score = riskAssessment.safety_score;
-      aiAnalysis.disruption_score = riskAssessment.disruption_score;
-      aiAnalysis.health_environment_score = riskAssessment.health_environment_score;
-      aiAnalysis.defect_severity_score = riskAssessment.defect_severity_score;
-      aiAnalysis.risk_score = riskAssessment.risk_score;
-      aiAnalysis.priority_rank = riskAssessment.priority_rank;
-    } catch (riskErr) {
-      console.warn('[NAGARSETU AI] Risk assessment computation note:', riskErr.message);
-    }
-
-    return res.json({
+    return res.status(200).json({
       success: true,
-      photo_url: photoUrl,
-      ai: aiAnalysis,
       category: aiAnalysis.category,
       title: aiAnalysis.title,
       description: aiAnalysis.description,
       priority: aiAnalysis.priority,
-      department: aiAnalysis.department || aiAnalysis.recommended_department
+      department: aiAnalysis.department || aiAnalysis.recommended_department,
+      confidence: aiAnalysis.confidence,
+      risk: riskObject,
+      // Compatibility fields for client components:
+      recommended_department: aiAnalysis.department || aiAnalysis.recommended_department,
+      risk_quadrants: aiAnalysis.risk_quadrants || {
+        human_safety: riskObject.human_safety,
+        public_disruption: riskObject.public_disruption,
+        health_environment: riskObject.health_environment,
+        physical_severity: riskObject.physical_severity
+      },
+      human_safety: riskObject.human_safety,
+      public_disruption: riskObject.public_disruption,
+      health_environment: riskObject.health_environment,
+      physical_severity: riskObject.physical_severity,
+      risk_score: riskObject.risk_score,
+      severity: riskObject.severity,
+      risk_assessment: aiAnalysis.risk_assessment,
+      photo_url: photoUrl,
+      ai: aiAnalysis
     });
   } catch (err) {
     console.error(`[${reqTime}] [NAGARSETU AI] Express analyze route error:`, err.message);
-    return res.status(500).json({
+    const statusCode = err.statusCode || 503;
+    const errorCode = err.errorCode || err.error || (statusCode === 503 ? 'AI_TEMPORARILY_UNAVAILABLE' : 'AI_SERVER_ERROR');
+    return res.status(statusCode).json({
       success: false,
-      error: 'AI_SERVER_ERROR',
-      message: 'Failed to analyze photo. An internal processing error occurred.'
+      error: errorCode,
+      message: err.message || 'AI Vision analysis is temporarily unavailable.'
     });
   }
 });

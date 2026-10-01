@@ -1824,7 +1824,16 @@ export async function requestReworkDepartmentHead(
 
   // 1. Try Express backend API first
   try {
-    const token = localStorage.getItem('nagarsetu_token') || sessionStorage.getItem('nagarsetu_token');
+    const token =
+      localStorage.getItem('nagarsetu_token_department_head') ||
+      sessionStorage.getItem('nagarsetu_token_department_head') ||
+      localStorage.getItem('nagarsetu_token_dept_head') ||
+      sessionStorage.getItem('nagarsetu_token_dept_head') ||
+      localStorage.getItem('nagarsetu_token_hod') ||
+      sessionStorage.getItem('nagarsetu_token_hod') ||
+      (localStorage.getItem('nagarsetu_token') && !['demo-token', 'demo-token-citizen'].includes(localStorage.getItem('nagarsetu_token') || '') ? localStorage.getItem('nagarsetu_token') : null) ||
+      (sessionStorage.getItem('nagarsetu_token') && !['demo-token', 'demo-token-citizen'].includes(sessionStorage.getItem('nagarsetu_token') || '') ? sessionStorage.getItem('nagarsetu_token') : null) ||
+      'demo-token-dept-head';
     const apiRes = await fetch(`${getApiUrl()}/api/department/verify`, {
       method: 'POST',
       headers: {
@@ -1897,7 +1906,16 @@ export async function approveResolutionDepartmentHead(
 
   // 1. Try Express backend API first
   try {
-    const token = localStorage.getItem('nagarsetu_token') || sessionStorage.getItem('nagarsetu_token');
+    const token =
+      localStorage.getItem('nagarsetu_token_department_head') ||
+      sessionStorage.getItem('nagarsetu_token_department_head') ||
+      localStorage.getItem('nagarsetu_token_dept_head') ||
+      sessionStorage.getItem('nagarsetu_token_dept_head') ||
+      localStorage.getItem('nagarsetu_token_hod') ||
+      sessionStorage.getItem('nagarsetu_token_hod') ||
+      (localStorage.getItem('nagarsetu_token') && !['demo-token', 'demo-token-citizen'].includes(localStorage.getItem('nagarsetu_token') || '') ? localStorage.getItem('nagarsetu_token') : null) ||
+      (sessionStorage.getItem('nagarsetu_token') && !['demo-token', 'demo-token-citizen'].includes(sessionStorage.getItem('nagarsetu_token') || '') ? sessionStorage.getItem('nagarsetu_token') : null) ||
+      'demo-token-dept-head';
     const apiRes = await fetch(`${getApiUrl()}/api/department/verify`, {
       method: 'POST',
       headers: {

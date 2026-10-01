@@ -3,14 +3,19 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { getApiUrl, getAiServiceUrl } from '../config/apiConfig';
 
 export const CIVIC_CATEGORIES = [
-  'Road Damage / Pothole',
-  'Water Leakage / Pipeline',
-  'Garbage / Waste',
-  'Drainage / Sewage',
-  'Streetlight / Electrical',
-  'Traffic Infrastructure',
-  'Public Infrastructure Damage',
-  'Other Civic Issue'
+  'Roads',
+  'Water',
+  'Drainage',
+  'Sanitation',
+  'Electricity',
+  'Traffic',
+  'Trees & Parks',
+  'Public Infrastructure',
+  'Parking',
+  'Public Property',
+  'Construction',
+  'Flooding',
+  'Safety Hazards'
 ] as const;
 
 export type CivicCategory = typeof CIVIC_CATEGORIES[number];
@@ -35,25 +40,25 @@ export function normalizeDepartment(dept?: string, category?: string): string {
   const str = (dept || '').toLowerCase();
   const cat = (category || '').toLowerCase();
 
-  if (str.includes('sanitation') || str.includes('garbage') || str.includes('solid waste') || str.includes('waste') || cat.includes('garbage') || cat.includes('waste')) {
+  if (str.includes('sanitation') || str.includes('garbage') || str.includes('solid waste') || str.includes('waste') || cat.includes('garbage') || cat.includes('waste') || cat === 'sanitation') {
     return 'Sanitation & Waste Management';
   }
   if (str.includes('water supply') || str.includes('water leakage') || str.includes('pipeline') || (str.includes('water') && !str.includes('drain') && !str.includes('sew')) || (cat.includes('water') && !cat.includes('drain'))) {
     return 'Water Supply & Sewerage Board';
   }
-  if (str.includes('drain') || str.includes('sewag') || str.includes('sewer') || cat.includes('drainage') || cat.includes('sewage')) {
+  if (str.includes('drain') || str.includes('sewag') || str.includes('sewer') || str.includes('flood') || cat.includes('drainage') || cat.includes('sewage') || cat === 'flooding') {
     return 'Drainage & Sewage Department';
   }
-  if (str.includes('electrical') || str.includes('electric') || str.includes('light') || str.includes('street light') || str.includes('lighting') || cat.includes('streetlight') || cat.includes('electrical')) {
+  if (str.includes('electrical') || str.includes('electric') || str.includes('light') || str.includes('street light') || str.includes('lighting') || cat.includes('streetlight') || cat.includes('electrical') || cat === 'electricity') {
     return 'Electrical & Street Lighting';
   }
-  if (str.includes('traffic') || str.includes('signal') || cat.includes('traffic')) {
+  if (str.includes('traffic') || str.includes('signal') || str.includes('parking') || cat.includes('traffic') || cat === 'parking') {
     return 'Traffic Management Department';
   }
-  if (str.includes('maintenance') || cat.includes('infrastructure') || cat.includes('other')) {
+  if (str.includes('tree') || str.includes('park') || str.includes('maintenance') || cat.includes('trees') || cat.includes('property') || cat.includes('hazard') || cat.includes('other')) {
     return 'Maintenance Department';
   }
-  if (str.includes('road') || str.includes('pothole') || str.includes('public works') || str.includes('pwd') || str.includes('footpath') || cat.includes('road')) {
+  if (str.includes('road') || str.includes('pothole') || str.includes('public works') || str.includes('pwd') || str.includes('footpath') || str.includes('construction') || cat.includes('road') || cat === 'roads' || cat === 'construction' || cat === 'public infrastructure') {
     return 'Public Works Department';
   }
 
@@ -61,45 +66,70 @@ export function normalizeDepartment(dept?: string, category?: string): string {
 }
 
 export const VALID_TAXONOMY_MAP: Record<CivicCategory, { department: string; defaultTitle: string; defaultPriority: PriorityLevel }> = {
-  'Road Damage / Pothole': {
+  'Roads': {
     department: 'Public Works Department',
-    defaultTitle: 'Asphalt Pothole / Road Surface Crater',
+    defaultTitle: 'Pothole / Road Surface Defect',
     defaultPriority: 'High'
   },
-  'Water Leakage / Pipeline': {
+  'Water': {
     department: 'Water Supply & Sewerage Board',
     defaultTitle: 'Municipal Water Pipeline Leakage',
     defaultPriority: 'High'
   },
-  'Garbage / Waste': {
+  'Drainage': {
+    department: 'Drainage & Sewage Department',
+    defaultTitle: 'Blocked Stormwater Drain & Sewage Overflow',
+    defaultPriority: 'High'
+  },
+  'Sanitation': {
     department: 'Sanitation & Waste Management',
     defaultTitle: 'Uncollected Solid Waste Accumulation',
     defaultPriority: 'Medium'
   },
-  'Drainage / Sewage': {
-    department: 'Drainage & Sewage Department',
-    defaultTitle: 'Blocked Stormwater Drain & Sewage Overflow',
-    defaultPriority: 'Critical'
-  },
-  'Streetlight / Electrical': {
+  'Electricity': {
     department: 'Electrical & Street Lighting',
     defaultTitle: 'Damaged / Inoperative Streetlight Fixture',
     defaultPriority: 'Medium'
   },
-  'Traffic Infrastructure': {
+  'Traffic': {
     department: 'Traffic Management Department',
     defaultTitle: 'Malfunctioning / Damaged Traffic Signal',
     defaultPriority: 'High'
   },
-  'Public Infrastructure Damage': {
+  'Trees & Parks': {
     department: 'Maintenance Department',
+    defaultTitle: 'Fallen Tree / Overgrown Vegetation Hazard',
+    defaultPriority: 'Medium'
+  },
+  'Public Infrastructure': {
+    department: 'Public Works Department',
     defaultTitle: 'Damaged Public Footpath / Railing',
     defaultPriority: 'High'
   },
-  'Other Civic Issue': {
+  'Parking': {
+    department: 'Traffic Management Department',
+    defaultTitle: 'Illegal Parking / Roadway Obstruction',
+    defaultPriority: 'Low'
+  },
+  'Public Property': {
     department: 'Maintenance Department',
-    defaultTitle: 'General Civic Defect / Public Grievance',
+    defaultTitle: 'Damaged Municipal Property / Structure',
     defaultPriority: 'Medium'
+  },
+  'Construction': {
+    department: 'Public Works Department',
+    defaultTitle: 'Construction Debris / Road Encroachment',
+    defaultPriority: 'Medium'
+  },
+  'Flooding': {
+    department: 'Drainage & Sewage Department',
+    defaultTitle: 'Severe Waterlogging / Urban Flooding',
+    defaultPriority: 'Critical'
+  },
+  'Safety Hazards': {
+    department: 'Maintenance Department',
+    defaultTitle: 'Dangerous Hazard / Structural Risk',
+    defaultPriority: 'Critical'
   }
 };
 
@@ -449,6 +479,7 @@ async function callExpressBackendAiAnalyze(file: File): Promise<any> {
 
     if (res.ok && (json.success || json.ai)) {
       const rawAi = json.ai || json;
+      const risk = json.risk || rawAi.risk || {};
       return {
         ...rawAi,
         category: rawAi.category || json.category,
@@ -456,7 +487,29 @@ async function callExpressBackendAiAnalyze(file: File): Promise<any> {
         description: rawAi.description || json.description,
         priority: rawAi.priority || json.priority,
         department: rawAi.department || rawAi.recommended_department || json.department,
-        recommended_department: rawAi.department || rawAi.recommended_department || json.department
+        recommended_department: rawAi.department || rawAi.recommended_department || json.department,
+        confidence: rawAi.confidence ?? json.confidence,
+        risk: {
+          human_safety: risk.human_safety ?? rawAi.human_safety ?? json.human_safety ?? 0,
+          public_disruption: risk.public_disruption ?? rawAi.public_disruption ?? json.public_disruption ?? 0,
+          health_environment: risk.health_environment ?? rawAi.health_environment ?? json.health_environment ?? 0,
+          physical_severity: risk.physical_severity ?? rawAi.physical_severity ?? json.physical_severity ?? 0,
+          risk_score: risk.risk_score ?? rawAi.risk_score ?? json.risk_score ?? 0,
+          severity: risk.severity || rawAi.severity || json.severity || 'Medium'
+        },
+        risk_quadrants: rawAi.risk_quadrants || json.risk_quadrants || {
+          human_safety: risk.human_safety ?? 0,
+          public_disruption: risk.public_disruption ?? 0,
+          health_environment: risk.health_environment ?? 0,
+          physical_severity: risk.physical_severity ?? 0
+        },
+        human_safety: risk.human_safety ?? rawAi.human_safety ?? json.human_safety,
+        public_disruption: risk.public_disruption ?? rawAi.public_disruption ?? json.public_disruption,
+        health_environment: risk.health_environment ?? rawAi.health_environment ?? json.health_environment,
+        physical_severity: risk.physical_severity ?? rawAi.physical_severity ?? json.physical_severity,
+        risk_score: risk.risk_score ?? rawAi.risk_score ?? json.risk_score,
+        severity: risk.severity || rawAi.severity || json.severity,
+        risk_assessment: rawAi.risk_assessment || json.risk_assessment
       };
     }
 
@@ -578,29 +631,41 @@ export async function detectCivicIssue(inputFile: File, bypassCache: boolean = f
   // If real successful Gemini response obtained:
   if (rawRes && rawRes.category && rawRes.success !== false && !rawRes.error) {
     const rawCategory = String(rawRes.category || '').trim();
-    let category: CivicCategory = 'Other Civic Issue';
+    let category: CivicCategory = 'Roads';
     if ((CIVIC_CATEGORIES as readonly string[]).includes(rawCategory)) {
       category = rawCategory as CivicCategory;
     } else {
       const lower = rawCategory.toLowerCase();
       if (lower.includes('road') || lower.includes('pothole') || lower.includes('asphalt')) {
-        category = 'Road Damage / Pothole';
+        category = 'Roads';
       } else if (lower.includes('water') || lower.includes('leak') || lower.includes('pipe')) {
-        category = 'Water Leakage / Pipeline';
-      } else if (lower.includes('garbage') || lower.includes('waste') || lower.includes('trash') || lower.includes('sanitation')) {
-        category = 'Garbage / Waste';
+        category = 'Water';
+      } else if (lower.includes('garbage') || lower.includes('waste') || lower.includes('trash') || lower.includes('sanitat')) {
+        category = 'Sanitation';
       } else if (lower.includes('drain') || lower.includes('sewag') || lower.includes('gutter')) {
-        category = 'Drainage / Sewage';
+        category = 'Drainage';
       } else if (lower.includes('street') || lower.includes('light') || lower.includes('electr')) {
-        category = 'Streetlight / Electrical';
+        category = 'Electricity';
       } else if (lower.includes('traffic') || lower.includes('signal')) {
-        category = 'Traffic Infrastructure';
+        category = 'Traffic';
+      } else if (lower.includes('tree') || lower.includes('park')) {
+        category = 'Trees & Parks';
+      } else if (lower.includes('flood')) {
+        category = 'Flooding';
+      } else if (lower.includes('hazard') || lower.includes('danger')) {
+        category = 'Safety Hazards';
+      } else if (lower.includes('parking')) {
+        category = 'Parking';
+      } else if (lower.includes('construction') || lower.includes('debris')) {
+        category = 'Construction';
+      } else if (lower.includes('property')) {
+        category = 'Public Property';
       } else if (lower.includes('infrastruct') || lower.includes('footpath') || lower.includes('damage') || lower.includes('public')) {
-        category = 'Public Infrastructure Damage';
+        category = 'Public Infrastructure';
       }
     }
 
-    const meta = VALID_TAXONOMY_MAP[category] || VALID_TAXONOMY_MAP['Other Civic Issue'];
+    const meta = VALID_TAXONOMY_MAP[category] || VALID_TAXONOMY_MAP['Roads'];
     const confidence = typeof rawRes.confidence === 'number' ? rawRes.confidence : 0.94;
     const confidenceLevel: 'High' | 'Medium' | 'Low' =
       confidence >= 0.85 ? 'High' : confidence >= 0.60 ? 'Medium' : 'Low';
@@ -625,8 +690,18 @@ export async function detectCivicIssue(inputFile: File, bypassCache: boolean = f
         brightness: visualFeatures.brightness,
         contrast: visualFeatures.contrast
       },
-      analysis_time_ms: Math.round(endTime - startTime)
-    };
+      analysis_time_ms: Math.round(endTime - startTime),
+      ...((rawRes.risk_quadrants || rawRes.risk_score !== undefined) ? {
+        risk_quadrants: rawRes.risk_quadrants,
+        human_safety: rawRes.human_safety,
+        public_disruption: rawRes.public_disruption,
+        health_environment: rawRes.health_environment,
+        physical_severity: rawRes.physical_severity,
+        risk_score: rawRes.risk_score,
+        severity: rawRes.severity,
+        risk_assessment: rawRes.risk_assessment
+      } : {})
+    } as any;
 
     setAnalysisCache(imageHash, result);
     return result;

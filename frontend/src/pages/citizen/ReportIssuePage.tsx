@@ -154,7 +154,7 @@ export const ReportIssuePage: React.FC = () => {
   const [primaryFeatures, setPrimaryFeatures] = useState<VisualFeatures | null>(null);
 
   // Form Field States
-  const [category, setCategory] = useState<CivicCategory>('Road Damage / Pothole');
+  const [category, setCategory] = useState<CivicCategory>('Roads');
   const [title, setTitle] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [priority, setPriority] = useState<PriorityLevel>('Medium');
@@ -359,7 +359,8 @@ export const ReportIssuePage: React.FC = () => {
       [angle]: { file, previewUrl: url }
     }));
 
-    if (angle === 'front') {
+    const isFirstImage = !selectedPhotoFile && !photoPreviewUrl;
+    if (angle === 'front' || isFirstImage) {
       setSelectedPhotoFile(file);
       setPhotoPreviewUrl(url);
       setPrimaryFeatures(null);
@@ -373,14 +374,9 @@ export const ReportIssuePage: React.FC = () => {
         console.warn('Local visual feature extraction skipped:', e);
       }
 
-      // Run AI Vision & Location Resolution on Front View
+      // Run AI Vision & Location Resolution on First Image / Front View
       await runAIVisionAndLocation(file, url);
     } else {
-      // If Front View hasn't been uploaded yet, set this as primary preview fallback
-      if (!angleSlots.front.file && !photoPreviewUrl) {
-        setSelectedPhotoFile(file);
-        setPhotoPreviewUrl(url);
-      }
       if (primaryFeatures) {
         try {
           const angleFeats = await extractVisualFeatures(file);
@@ -445,13 +441,22 @@ export const ReportIssuePage: React.FC = () => {
       setPrimaryFeatures(res.visual_features || null);
 
       if (res.is_available !== false && res.confidence > 0) {
-        if (res.category) setCategory(res.category as CivicCategory);
-        if (res.title) setTitle(res.title);
-        if (res.description) setDescription(res.description);
-        if (res.priority) setPriority(res.priority);
+        if (res.category) {
+          setCategory(res.category as CivicCategory);
+        }
+        if (res.title) {
+          setTitle(res.title);
+        }
+        if (res.description) {
+          setDescription(res.description);
+        }
+        if (res.priority) {
+          setPriority(res.priority as PriorityLevel);
+        }
         if (res.department) {
           setDepartment(normalizeDepartment(res.department, res.category));
         }
+        setIsManuallyEdited(false);
       }
     } catch (err) {
       console.error('AI Vision Error:', err);

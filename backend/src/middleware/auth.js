@@ -104,6 +104,17 @@ const DEMO_USER_TOKENS = {
     department_code: 'PWD',
     language_pref: 'en'
   },
+  'demo-token-department-head': {
+    id: 1,
+    name: 'Rahul Kumar',
+    mobile: '+91 9822000001',
+    email: 'rahul.kumar@nagarsetu.gov.in',
+    role: 'department_head',
+    department_id: '8ed9f760-1314-427c-a515-c2a54d6df6d8',
+    department_name: 'Public Works Department (PWD)',
+    department_code: 'PWD',
+    language_pref: 'en'
+  },
   'demo-token-hod': {
     id: 1,
     name: 'Rahul Kumar',
@@ -113,6 +124,28 @@ const DEMO_USER_TOKENS = {
     department_id: '8ed9f760-1314-427c-a515-c2a54d6df6d8',
     department_name: 'Public Works Department (PWD)',
     department_code: 'PWD',
+    language_pref: 'en'
+  },
+  'demo-token-water-head': {
+    id: 3,
+    name: 'Vikram Patil',
+    mobile: '+91 9822000003',
+    email: 'vikram.patil@nagarsetu.gov.in',
+    role: 'department_head',
+    department_id: 'ead370cc-459c-44f0-899f-8a97f0928beb',
+    department_name: 'Water Supply & Sewerage Board',
+    department_code: 'WTR',
+    language_pref: 'en'
+  },
+  'demo-token-wtr-head': {
+    id: 3,
+    name: 'Vikram Patil',
+    mobile: '+91 9822000003',
+    email: 'vikram.patil@nagarsetu.gov.in',
+    role: 'department_head',
+    department_id: 'ead370cc-459c-44f0-899f-8a97f0928beb',
+    department_name: 'Water Supply & Sewerage Board',
+    department_code: 'WTR',
     language_pref: 'en'
   },
   'demo-token-service-staff': {
@@ -249,7 +282,24 @@ async function authenticateToken(req, res, next) {
     }
 
     if (!role) {
-      role = authUser.app_metadata?.role || authUser.user_metadata?.role || ((authUser.email || '').toLowerCase().includes('admin') ? 'city_admin' : 'citizen');
+      const em = (authUser.email || '').toLowerCase().trim();
+      if (em.includes('admin')) {
+        role = 'city_admin';
+      } else if (
+        em.includes('rahul.kumar') ||
+        em.includes('amit.sharma') ||
+        em.includes('vikram.patil') ||
+        em.includes('sanjay.more') ||
+        em.includes('aditya.joshi') ||
+        em.includes('kunal.kulkarni') ||
+        em.includes('rohan.deshmukh') ||
+        em.includes('hod') ||
+        em.includes('depthead')
+      ) {
+        role = 'department_head';
+      } else {
+        role = authUser.app_metadata?.role || authUser.user_metadata?.role || 'citizen';
+      }
     }
 
     const normalizedRole = normalizeRole(role);

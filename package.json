@@ -1,6 +1,6 @@
 {
   "name": "nagarsetu-segue",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "private": true,
   "description": "NAGARSETU Segue - AI-Powered Civic Issue Reporting Web Application (Full-Stack Unified)",
   "workspaces": [
